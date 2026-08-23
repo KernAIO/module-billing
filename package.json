@@ -1,7 +1,7 @@
 {
   "name": "@kernhq/module-billing",
-  "version": "0.1.0",
-  "description": "Kern billing module: plans, entitlements, subscriptions and Stripe \u2014 the mechanism that lets any Kern instance sell seats on itself",
+  "version": "0.2.0",
+  "description": "Kern billing module: plans, entitlements, subscriptions and Stripe — the mechanism that lets any Kern instance sell seats on itself",
   "homepage": "https://kernaio.com",
   "license": "AGPL-3.0-only",
   "type": "module",
