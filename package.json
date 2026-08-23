@@ -1,0 +1,73 @@
+{
+  "name": "@kernhq/module-billing",
+  "version": "0.1.0",
+  "description": "Kern billing module: plans, entitlements, subscriptions and Stripe \u2014 the mechanism that lets any Kern instance sell seats on itself",
+  "homepage": "https://kernaio.com",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KernAIO/modules",
+    "directory": "packages/billing"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "migrations",
+    "src/client",
+    "src/contract.ts"
+  ],
+  "exports": {
+    "./contract": {
+      "types": "./dist/contract.d.ts",
+      "import": "./dist/contract.js",
+      "default": "./dist/contract.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js",
+      "default": "./dist/server/index.js"
+    },
+    "./client": {
+      "types": "./src/client/index.ts",
+      "svelte": "./src/client/index.ts",
+      "default": "./src/client/index.ts"
+    },
+    "./client/*": {
+      "types": "./src/client/*",
+      "svelte": "./src/client/*",
+      "default": "./src/client/*"
+    },
+    "./migrations": "./migrations"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "test:unit": "vitest run --exclude 'src/**/*.int.test.ts'"
+  },
+  "dependencies": {
+    "@kernhq/contracts": "^0.1.0",
+    "@kernhq/kernel": "^0.1.0",
+    "@kernhq/sdk": "^0.1.0",
+    "@orpc/contract": "^1.15.0",
+    "@orpc/server": "^1.15.0",
+    "drizzle-orm": "^0.45.0",
+    "stripe": "^22.5.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@kernhq/tsconfig": "^0.1.0",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.15.0",
+    "drizzle-kit": "^0.31.0",
+    "pg": "^8.16.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.0"
+  }
+}
