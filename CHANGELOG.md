@@ -1,5 +1,11 @@
 # @kernhq/module-billing
 
+## 0.3.2
+
+### Patch Changes
+
+- chore: refresh the lockfile for the changesets dependency
+
 ## 0.3.1
 
 ### Patch Changes
