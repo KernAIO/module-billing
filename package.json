@@ -1,7 +1,7 @@
 {
   "name": "@kernhq/module-billing",
   "version": "0.3.1",
-  "description": "Kern billing module: plans, entitlements, subscriptions and Stripe — the mechanism that lets any Kern instance sell seats on itself",
+  "description": "Kern billing module: plans, entitlements, subscriptions and Stripe \u2014 the mechanism that lets any Kern instance sell seats on itself",
   "homepage": "https://github.com/KernAIO/module-billing#readme",
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -49,7 +49,8 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "test:unit": "vitest run --exclude 'src/**/*.int.test.ts'",
-    "format": "biome check --write ."
+    "format": "biome check --write .",
+    "changeset": "changeset"
   },
   "dependencies": {
     "@kernhq/contracts": "^0.5.1",
@@ -62,6 +63,8 @@
     "zod": "^4.1.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@changesets/cli": "^2.27.0",
     "@kernhq/tsconfig": "^0.1.0",
     "@kernhq/ui": "^0.8.0",
     "@tanstack/svelte-query": "^6.1.0",
@@ -72,8 +75,7 @@
     "svelte": "^5.46.0",
     "svelte-check": "^4.0.0",
     "typescript": "~5.9.3",
-    "vitest": "^4.0.0",
-    "@biomejs/biome": "^2.0.0"
+    "vitest": "^4.0.0"
   },
   "peerDependencies": {
     "@kernhq/ui": "^0.8.0",
