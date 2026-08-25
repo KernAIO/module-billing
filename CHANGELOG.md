@@ -1,5 +1,11 @@
 # @kernhq/module-billing
 
+## 0.3.1
+
+### Patch Changes
+
+- fix(deps): reach the framework that was just published
+
 ## 0.3.0
 
 ### Minor Changes
