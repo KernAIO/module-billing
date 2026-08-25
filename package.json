@@ -1,7 +1,7 @@
 {
   "name": "@kernhq/module-billing",
   "version": "0.2.0",
-  "description": "Kern billing module: plans, entitlements, subscriptions and Stripe — the mechanism that lets any Kern instance sell seats on itself",
+  "description": "Kern billing module: plans, entitlements, subscriptions and Stripe \u2014 the mechanism that lets any Kern instance sell seats on itself",
   "homepage": "https://kernaio.com",
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -45,15 +45,15 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && svelte-check --tsconfig ./tsconfig.client.json --threshold error",
     "lint": "biome check .",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "test:unit": "vitest run --exclude 'src/**/*.int.test.ts'"
   },
   "dependencies": {
-    "@kernhq/contracts": "^0.2.0",
-    "@kernhq/kernel": "^0.2.0",
+    "@kernhq/contracts": "^0.5.1",
+    "@kernhq/kernel": "^0.6.0",
     "@kernhq/sdk": "^0.1.0",
     "@orpc/contract": "^1.15.0",
     "@orpc/server": "^1.15.0",
@@ -63,11 +63,31 @@
   },
   "devDependencies": {
     "@kernhq/tsconfig": "^0.1.0",
+    "@kernhq/ui": "^0.7.0",
+    "@tanstack/svelte-query": "^6.1.0",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.15.0",
     "drizzle-kit": "^0.31.0",
     "pg": "^8.16.0",
+    "svelte": "^5.46.0",
+    "svelte-check": "^4.0.0",
     "typescript": "~5.9.3",
     "vitest": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@kernhq/ui": "^0.7.0",
+    "@tanstack/svelte-query": "^6.1.0",
+    "svelte": "^5.46.0"
+  },
+  "peerDependenciesMeta": {
+    "@kernhq/ui": {
+      "optional": true
+    },
+    "@tanstack/svelte-query": {
+      "optional": true
+    },
+    "svelte": {
+      "optional": true
+    }
   }
 }

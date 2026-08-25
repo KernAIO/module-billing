@@ -6,7 +6,7 @@ import {
   planBlockedReason,
   trialDaysLeft,
   usageRatio,
-} from './index.js'
+} from './format.js'
 
 describe('formatMoney', () => {
   it('shows a whole-unit price without decimals and a part-unit one with them', () => {
