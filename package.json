@@ -1,7 +1,7 @@
 {
   "name": "@kernhq/module-billing",
   "version": "0.3.0",
-  "description": "Kern billing module: plans, entitlements, subscriptions and Stripe — the mechanism that lets any Kern instance sell seats on itself",
+  "description": "Kern billing module: plans, entitlements, subscriptions and Stripe \u2014 the mechanism that lets any Kern instance sell seats on itself",
   "homepage": "https://kernaio.com",
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -53,8 +53,8 @@
   },
   "dependencies": {
     "@kernhq/contracts": "^0.5.1",
-    "@kernhq/kernel": "^0.6.0",
-    "@kernhq/sdk": "^0.1.0",
+    "@kernhq/kernel": "^0.7.0",
+    "@kernhq/sdk": "^0.1.5",
     "@orpc/contract": "^1.15.0",
     "@orpc/server": "^1.15.0",
     "drizzle-orm": "^0.45.0",
@@ -63,7 +63,7 @@
   },
   "devDependencies": {
     "@kernhq/tsconfig": "^0.1.0",
-    "@kernhq/ui": "^0.7.0",
+    "@kernhq/ui": "^0.8.0",
     "@tanstack/svelte-query": "^6.1.0",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.15.0",
@@ -75,7 +75,7 @@
     "vitest": "^4.0.0"
   },
   "peerDependencies": {
-    "@kernhq/ui": "^0.7.0",
+    "@kernhq/ui": "^0.8.0",
     "@tanstack/svelte-query": "^6.1.0",
     "svelte": "^5.46.0"
   },
