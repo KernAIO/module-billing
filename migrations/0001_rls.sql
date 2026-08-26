@@ -13,6 +13,8 @@ alter table "mod_billing"."invoices" enable row level security;
 --> statement-breakpoint
 alter table "mod_billing"."invoices" force row level security;
 --> statement-breakpoint
+drop policy if exists "invoices_ws_isolation" on "mod_billing"."invoices";
+--> statement-breakpoint
 create policy "invoices_ws_isolation" on "mod_billing"."invoices"
   using (workspace_id::text = current_setting('app.workspace_id', true))
   with check (workspace_id::text = current_setting('app.workspace_id', true));
