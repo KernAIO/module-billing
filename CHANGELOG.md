@@ -1,5 +1,11 @@
 # @kernhq/module-billing
 
+## 0.3.3
+
+### Patch Changes
+
+- fix: declare @kernhq/kernel and @kernhq/contracts as peerDependencies
+
 ## 0.3.2
 
 ### Patch Changes
