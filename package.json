@@ -63,7 +63,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "@changesets/cli": "^2.27.0",
-    "@kernhq/contracts": "^0.6.1",
+    "@kernhq/contracts": "^0.7.0",
     "@kernhq/kernel": "^0.7.0",
     "@kernhq/tsconfig": "^0.1.0",
     "@kernhq/ui": "^0.10.0",
@@ -78,7 +78,7 @@
     "vitest": "^4.0.0"
   },
   "peerDependencies": {
-    "@kernhq/contracts": "^0.6.1",
+    "@kernhq/contracts": "^0.7.0",
     "@kernhq/kernel": "^0.7.0",
     "@kernhq/ui": "^0.10.0",
     "@tanstack/svelte-query": "^6.1.0",
