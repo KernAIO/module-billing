@@ -13,10 +13,15 @@ mounted now as a `raw` module route, so the signature is checked against the exa
 
 - **A cancelled or suspended workspace resolved to *unlimited*** — every limit null and `sso: true`,
   because "not entitled" fell through to `PlanLimits.parse({})`. Not paying bought more than paying
-  did. A non-entitled status now keeps the plan's limits with nothing left that lets the workspace
-  grow: seats frozen, storage 0, SSO off. `apiRateLimit` and `auditRetentionDays` are deliberately
-  untouched, because narrowing either would break reading and exporting — the one thing suspension
-  promises. An override no longer outlives the status that suspended the workspace.
+  did: a customer on a plan *without* single sign-on could cancel and register an identity provider.
+  Freezing `sso` off is what stops that, and it has to be the entitlement rather than the write gate,
+  because `/sso/register` is a Better Auth route outside `workspaceScoped` — no write gate ever sees
+  it, and `entitlements.has('sso')` is the only thing standing there. A non-entitled status now keeps
+  the plan's limits with nothing left that lets the workspace grow: seats frozen, storage 0, SSO off.
+  `apiRateLimit` and `auditRetentionDays` are deliberately untouched, because narrowing either would
+  break reading and exporting — the one thing suspension promises (ADR 0003 §6). The same merge also
+  took the plan branch whenever an override was present, so an operator who had comped one limit
+  handed back the whole plan on cancellation; an override no longer outlives the status.
 - **Trials never ended.** Signup wrote `trialing` with a `trialEndsAt` that nothing ever read again,
   and `trialing` is entitled — so every signup was on the trial plan for ever, free, with no card.
   `billing.expire-trials` suspends a trial with no Stripe subscription behind it and emits
