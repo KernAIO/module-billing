@@ -1,4 +1,4 @@
-import { type Kernel, o, requires, workspaceScoped } from '@kernhq/kernel'
+import { allowWhileSuspended, type Kernel, o, requires, workspaceScoped } from '@kernhq/kernel'
 import { implement, ORPCError } from '@orpc/server'
 import { BILLING_PERMISSIONS, billingContract, billingEvents, MODULE_ID, PlanLimits } from '../contract.js'
 import * as entitlements from './services/entitlements.js'
@@ -95,19 +95,30 @@ export function billingRouter(kernel: Kernel) {
           nextCursor: null,
         })),
 
+      /**
+       * `allowWhileSuspended` on both, and it is not a convenience.
+       *
+       * A suspended workspace is read-only, and these two POSTs are the only way out of it — one
+       * opens Checkout, the other opens Stripe's portal where the card is fixed. Gated, suspension
+       * would be a trap sprung on the exact customer trying to pay their way out of it, and only an
+       * operator could undo it.
+       */
       checkout: scoped.subscription.checkout
+        .use(allowWhileSuspended)
         .use(requires(BILLING_PERMISSIONS.manage))
         .handler(async ({ input, context }) =>
           stripeSvc.checkout(kernel, {
             workspaceId: input.workspaceId,
             planSlug: input.planSlug,
             seats: input.seats,
+            returnPath: input.returnPath,
             email: context.principal.email ?? undefined,
             baseUrl: kernel.env.KERN_BASE_URL,
           }),
         ),
 
       portal: scoped.subscription.portal
+        .use(allowWhileSuspended)
         .use(requires(BILLING_PERMISSIONS.manage))
         .handler(async ({ input }) =>
           stripeSvc.portal(kernel, {

@@ -54,10 +54,47 @@ const { workspaceId, workspaceSlug: slug }: Props = $props()
 const canManage = $derived(session.can(BILLING_PERMISSIONS.manage))
 const locale = $derived(messageLocale())
 
+/** Where Stripe sends the person back to, and where the portal returns them. */
+const returnPath = $derived(`/${slug}/settings/billing/plan`)
+
+/**
+ * What Stripe said on the way back, from `?checkout=`.
+ *
+ * Read from `window.location` rather than the router: a module page cannot import `$app/state` — it
+ * is a SvelteKit alias, and this package is type-checked on its own. The parameter is stripped once
+ * read, so a refresh half an hour later does not announce a payment again.
+ *
+ * Nothing used to read it at all: the person came back from paying to a page that looked exactly
+ * as it had before they left, which reads as a payment that did not work.
+ */
+type Outcome = 'done' | 'cancelled' | 'changed'
+let outcome = $state<Outcome | null>(null)
+/** True between "Stripe took the card" and "the webhook told us about it". */
+let awaitingWebhook = $state(false)
+/** How long a webhook may take before the page stops promising it is coming. */
+const WEBHOOK_GRACE_MS = 90_000
+/** When waiting stops being honest. Fixed once, when the wait starts. */
+let waitDeadline = $state<number | null>(null)
+
+$effect(() => {
+  const url = new URL(window.location.href)
+  const value = url.searchParams.get('checkout')
+  if (value !== 'done' && value !== 'cancelled' && value !== 'changed') return
+  outcome = value
+  awaitingWebhook = value === 'done'
+  waitDeadline = value === 'done' ? Date.now() + WEBHOOK_GRACE_MS : null
+  url.searchParams.delete('checkout')
+  window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
+})
+
 const billing = createQuery(() => ({
   queryKey: ['billing', 'subscription', workspaceId],
   queryFn: () => api.subscription.get({ workspaceId }),
   enabled: Boolean(workspaceId),
+  // Stripe redirects the browser back before it has delivered the webhook, so the subscription is
+  // genuinely not there yet for a second or two. Polling is what turns "nothing happened" into a
+  // page that fills itself in.
+  refetchInterval: awaitingWebhook ? 3_000 : false,
 }))
 
 const plans = createQuery(() => ({
@@ -75,6 +112,46 @@ const invoices = createQuery(() => ({
 const data = $derived(billing.data)
 const sub = $derived(data?.subscription ?? null)
 const usage = $derived(data?.usage ?? { seats: 0, storageBytes: 0, updatedAt: '' })
+
+/**
+ * Stop waiting — either because the webhook landed, or because it is not going to.
+ *
+ * A poll with no end is the failure mode here: if `STRIPE_WEBHOOK_SECRET` is wrong, every delivery
+ * is rejected and the subscription never appears, so a page promising "this updates itself" refetches
+ * every three seconds for as long as the tab is open and never stops lying. The deadline is fixed
+ * when the wait starts rather than restarted here, because this effect re-runs on every poll — a
+ * timer created inside it would be cleared and rebuilt each time and could never fire.
+ */
+let webhookStalled = $state(false)
+
+$effect(() => {
+  if (!awaitingWebhook) return
+  /**
+   * `stripeSubscriptionId` is the signal, and it has to be — a status is not one.
+   *
+   * A workspace that is about to pay for the first time already has a subscription *row*: signup
+   * writes one on the default plan, `trialing`, with no Stripe subscription behind it. So "there is
+   * a row, and it is not cancelled" is true before the customer ever reaches Stripe, and waiting on
+   * it declares the payment confirmed on the first poll — which is the same lie the wait exists to
+   * avoid, told faster. `applySubscription` is what fills this column in, and it only ever runs from
+   * a webhook that verified.
+   */
+  if (sub?.stripeSubscriptionId) {
+    awaitingWebhook = false
+    return
+  }
+  const left = (waitDeadline ?? 0) - Date.now()
+  if (left <= 0) {
+    awaitingWebhook = false
+    webhookStalled = true
+    return
+  }
+  const timer = setTimeout(() => {
+    awaitingWebhook = false
+    webhookStalled = true
+  }, left)
+  return () => clearTimeout(timer)
+})
 
 const STATUS_LABEL: Record<string, () => string> = {
   trialing: () => t('status_trialing'),
@@ -105,25 +182,56 @@ const nf = $derived(new Intl.NumberFormat(locale))
 const dateFmt = $derived(new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }))
 const day = (iso: string | null) => (iso ? dateFmt.format(new Date(iso)) : '—')
 
-/** Sends the person to Stripe. Kept as a mutation so the button can show it is working. */
+const reload = () => {
+  void queryClient.invalidateQueries({ queryKey: ['billing'] })
+}
+
+/**
+ * Buying a plan, or moving to another one.
+ *
+ * The server decides which of the two it is — a workspace with a subscription is repriced in place,
+ * one without goes through Checkout — and says so in `changed`. A repriced plan is already live, so
+ * there is nowhere to send the browser.
+ */
 const checkout = createMutation(() => ({
-  mutationFn: (planSlug: string) => api.subscription.checkout({ workspaceId, planSlug }),
-  onSuccess: ({ url }) => {
+  mutationFn: (planSlug: string) => api.subscription.checkout({ workspaceId, planSlug, returnPath }),
+  onSuccess: ({ url, changed }) => {
+    if (changed) {
+      toast.success(t('plan_changed'))
+      reload()
+      return
+    }
     window.location.href = url
   },
   onError: (e: Error) => toast.error(e.message),
+  onSettled: () => {
+    leaving = false
+  },
 }))
 
 const portal = createMutation(() => ({
-  mutationFn: () => api.subscription.portal({ workspaceId, returnPath: `/${slug}/settings/billing/plan` }),
+  mutationFn: () => api.subscription.portal({ workspaceId, returnPath }),
   onSuccess: ({ url }) => {
     window.location.href = url
   },
   onError: (e: Error) => toast.error(e.message),
+  onSettled: () => {
+    leaving = false
+  },
 }))
 
-const reload = () => {
-  void queryClient.invalidateQueries({ queryKey: ['billing'] })
+/**
+ * Guards the second click, which `disabled={mutation.isPending}` does not.
+ *
+ * The attribute reaches the button on the next render and two quick clicks are one render apart —
+ * on this screen that opens two Stripe Checkout sessions, or files two plan changes, each of which
+ * is a proration the customer sees on their bill.
+ */
+let leaving = $state(false)
+function once(run: () => void) {
+  if (leaving) return
+  leaving = true
+  run()
 }
 </script>
 
@@ -152,6 +260,53 @@ const reload = () => {
     <h1 class="text-[20px] font-medium text-[var(--kern-ink-900)]">{t('title')}</h1>
     <p class="text-[13px] text-[var(--kern-ink-400)]">{t('subtitle')}</p>
   </header>
+
+  <!-- What happened at Stripe. Coming back from a payment to a page that looks exactly as it did
+       before you left reads as a payment that failed, so the page says which of the three it was —
+       including the honest middle one, where the money has moved and the webhook has not landed. -->
+  {#if outcome}
+    {@const pending = outcome === 'done' && awaitingWebhook}
+    {@const stalled = outcome === 'done' && webhookStalled}
+    {@const tone =
+      outcome === 'cancelled'
+        ? 'var(--kern-slate-tint)'
+        : stalled
+          ? 'var(--kern-warning-tint)'
+          : pending
+            ? 'var(--kern-info-tint)'
+            : 'var(--kern-success-tint)'}
+    <div
+      class="flex items-start justify-between gap-3 rounded-[var(--kern-r-sm)] px-3 py-2.5"
+      style="background: {tone}"
+      role="status"
+    >
+      <div class="grid gap-0.5">
+        <span class="text-[13px] font-medium text-[var(--kern-ink-900)]">
+          {outcome === 'cancelled'
+            ? t('checkout_cancelled')
+            : outcome === 'changed'
+              ? t('checkout_changed')
+              : stalled
+                ? t('checkout_slow')
+                : pending
+                  ? t('checkout_pending')
+                  : t('checkout_done')}
+        </span>
+        <span class="text-[13px] text-[var(--kern-ink-700)]">
+          {outcome === 'cancelled'
+            ? t('checkout_cancelled_hint')
+            : outcome === 'changed'
+              ? t('plan_changed')
+              : stalled
+                ? t('checkout_slow_hint')
+                : pending
+                  ? t('checkout_pending_hint')
+                  : t('checkout_done_hint')}
+        </span>
+      </div>
+      <Button variant="ghost" size="sm" onclick={() => (outcome = null)}>{t('dismiss')}</Button>
+    </div>
+  {/if}
 
   {#if billing.isPending}
     <Skeleton class="h-[132px] w-full rounded-[var(--kern-r-md)]" />
@@ -202,7 +357,7 @@ const reload = () => {
                     variant="secondary"
                     disabled={!canManage || portal.isPending}
                     loading={portal.isPending}
-                    onclick={() => portal.mutate()}
+                    onclick={() => once(() => portal.mutate())}
                   >
                     {t('manage_payment')}
                   </Button>
@@ -295,7 +450,7 @@ const reload = () => {
                       variant={isCurrent ? 'secondary' : 'primary'}
                       disabled={isCurrent || !canManage || blocked !== null || checkout.isPending}
                       loading={checkout.isPending && checkout.variables === plan.slug}
-                      onclick={() => checkout.mutate(plan.slug)}
+                      onclick={() => once(() => checkout.mutate(plan.slug))}
                     >
                       {isCurrent ? t('current') : t('choose_plan')}
                     </Button>

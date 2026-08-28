@@ -224,11 +224,30 @@ export const billingContract = {
       .route({ method: 'GET', path: '/subscription/invoices', tags: ['billing'] })
       .input(ws.extend(PageInput.shape))
       .output(page(Invoice)),
-    /** Stripe Checkout for a new subscription or a plan change; returns a URL to send the user to. */
+    /**
+     * Buy a plan, or move to a different one.
+     *
+     * Two different acts behind one procedure, because the caller does not know which it is: a
+     * workspace with no Stripe subscription needs Checkout (a card has to be collected), and one
+     * that already has a subscription needs its existing subscription repriced — opening a second
+     * Checkout there leaves the first subscription running and bills the customer twice.
+     *
+     * `changed` says which happened. When it is true the plan is already live and `url` is simply
+     * where to send the person back to; when it is false `url` is Stripe's hosted Checkout.
+     *
+     * `returnPath` is the workspace-relative path to come back to, exactly as `portal` takes it —
+     * billing knows workspace ids and not slugs, so the caller supplies the route.
+     */
     checkout: baseContract
       .route({ method: 'POST', path: '/subscription/checkout', tags: ['billing'] })
-      .input(ws.extend({ planSlug: z.string(), seats: z.number().int().positive().optional() }))
-      .output(z.object({ url: z.string() })),
+      .input(
+        ws.extend({
+          planSlug: z.string(),
+          seats: z.number().int().positive().optional(),
+          returnPath: z.string().default('/'),
+        }),
+      )
+      .output(z.object({ url: z.string(), changed: z.boolean().default(false) })),
     /** Stripe's own billing portal: payment method, cancellation, invoice download. */
     portal: baseContract
       .route({ method: 'POST', path: '/subscription/portal', tags: ['billing'] })

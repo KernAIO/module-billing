@@ -163,6 +163,39 @@ describe('entitlements', () => {
     expect((await entitlements.resolve(kernel, WS_A)).active).toBe(true)
   })
 
+  it('does not hand a cancelled workspace the paid feature its plan refused', async () => {
+    // Cancelling used to resolve to `PlanLimits.parse({})` — every limit null and, because the
+    // schema defaults it, `sso: true`. So a workspace on a plan *without* SSO became able to
+    // register an identity provider by cancelling: cancelling was an upgrade.
+    //
+    // The read-only gate does not cover this. `/sso/register` is a Better Auth route outside
+    // `workspaceScoped`, so no write gate ever sees it and `entitlements.has('sso')` is the only
+    // thing standing there. That is why `sso` is frozen off rather than left to the gate.
+    await subsSvc.setStatus(kernel, WS_A, 'canceled')
+    const e = await entitlements.resolve(kernel, WS_A)
+    expect(e.active).toBe(false)
+    expect(e.sso).toBe(false)
+    // nothing else widened on the way out either
+    expect(e.seats).toBe(3)
+    expect(e.storageBytes).toBe(0)
+    await subsSvc.setStatus(kernel, WS_A, 'active')
+  })
+
+  it('does not let an override outlive the payment it was comped against', async () => {
+    // The same bug had a second half: with any override present the merge took the plan branch
+    // regardless of status, so an operator who had comped one limit kept the *whole* plan on
+    // cancellation. An override is an operator comping a limit, never an operator un-suspending a
+    // workspace — `setStatus` is that, and the two must not be reachable from one another.
+    await subsSvc.setOverride(kernel, WS_A, { seats: 50, sso: true }, null)
+    await subsSvc.setStatus(kernel, WS_A, 'canceled')
+    const e = await entitlements.resolve(kernel, WS_A)
+    expect(e.sso).toBe(false)
+    expect(e.storageBytes).toBe(0)
+    await subsSvc.setOverride(kernel, WS_A, null, null)
+    await subsSvc.setStatus(kernel, WS_A, 'active')
+    expect((await entitlements.resolve(kernel, WS_A)).sso).toBe(false)
+  })
+
   it('answers the kernel through the broker, which is the only coupling core has', async () => {
     expect(kernel.broker.has('billing.entitlements.get')).toBe(true)
     const e = await kernel.entitlements.of(WS_A)

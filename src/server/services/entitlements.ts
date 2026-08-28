@@ -16,6 +16,30 @@ const ENTITLED: ReadonlySet<string> = new Set<SubscriptionStatus>(['trialing', '
 const INACTIVE: ReadonlySet<string> = new Set<SubscriptionStatus>(['suspended', 'canceled'])
 
 /**
+ * What a workspace keeps once its subscription stops entitling it.
+ *
+ * This used to be `PlanLimits.parse({})`, which is *unlimited* — so cancelling or being suspended
+ * made a workspace strictly more capable than paying for it did, which is the opposite of what
+ * suspension means. Nothing noticed, because every field parsed and `active: false` reached only a
+ * banner.
+ *
+ * The rule now: never wider than the plan, and nothing left that lets the workspace **grow**. Seats
+ * and storage stop at what is already there, and SSO is a paid feature that stops being included.
+ *
+ * `apiRateLimit` and `auditRetentionDays` are deliberately untouched. Narrowing either would break
+ * *reading* — the budget is spent by every workspace-scoped request, retention decides what a
+ * pruner deletes — and being able to read and export what is yours is the one promise suspension
+ * makes. See ADR 0003 §6.
+ *
+ * `seats` cannot express a zero floor (`PlanLimits.seats` is positive-or-null, and 0 would fail the
+ * parse the plan screen does on the way out), so the floor is 1: no new member, and not one person
+ * removed from the ones already there.
+ */
+function frozen(limits: PlanLimits): PlanLimits {
+  return { ...limits, seats: limits.seats ?? 1, storageBytes: 0, sso: false }
+}
+
+/**
  * What a workspace is allowed to do, resolved from its plan and any override an admin has set.
  *
  * The result is exactly the shape `kernel.entitlements` expects, because this is the procedure the
@@ -63,16 +87,13 @@ export async function resolve(kernel: Kernel, workspaceId: string): Promise<Part
   // a default the admin never chose — which means dropping the keys the patch does not mention
   // rather than spreading them as `undefined`.
   const patch = ovr?.limits ? definedOnly(PlanLimitsPatch.parse(ovr.limits)) : null
-  const merged = patch
-    ? { ...base, ...patch }
-    : ENTITLED.has(row.status)
-      ? base
-      : // Not entitled: the plan's allowances do not apply, but nothing is taken away that would
-        // stop the customer reading and exporting what is theirs.
-        PlanLimits.parse({})
+  const merged = patch ? { ...base, ...patch } : base
 
+  // The status decides entitlement; the plan and the override decide the numbers. An override is an
+  // operator comping a *limit*, never an operator un-suspending a workspace — that is `setStatus`,
+  // and keeping the two apart is what stops a comped account quietly outliving its own payment.
   return {
-    ...merged,
+    ...(ENTITLED.has(row.status) ? merged : frozen(merged)),
     planName: row.planName ?? null,
     active: !INACTIVE.has(row.status),
   }
