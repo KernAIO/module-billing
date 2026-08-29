@@ -1,5 +1,11 @@
 # @kernhq/module-billing
 
+## 0.4.1
+
+### Patch Changes
+
+- fix(deps): resolve stripe to 22.6.0 so every environment shares one API version
+
 ## 0.4.0
 
 ### Minor Changes
