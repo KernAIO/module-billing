@@ -57,7 +57,7 @@
     "@orpc/contract": "^1.15.0",
     "@orpc/server": "^1.15.0",
     "drizzle-orm": "^0.45.0",
-    "stripe": "^22.5.0",
+    "stripe": "^22.6.0",
     "zod": "^4.1.0"
   },
   "devDependencies": {
