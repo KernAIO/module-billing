@@ -17,8 +17,9 @@ export function client(): Stripe | null {
   if (!key) return null
   return new Stripe(key, {
     // Pinned deliberately: an account-level API version change must not reach a running instance
-    // before its image has been built against it.
-    apiVersion: '2026-07-29.dahlia',
+    // before its image has been built against it. This must match the version bundled with the
+    // installed `stripe` package — the SDK's types reject any other literal.
+    apiVersion: '2026-08-26.dahlia',
     appInfo: { name: 'Kern', url: 'https://kernaio.com' },
     maxNetworkRetries: 2,
   })
