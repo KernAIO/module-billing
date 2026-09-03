@@ -1,5 +1,11 @@
 # @kernhq/module-billing
 
+## 0.5.1
+
+### Patch Changes
+
+- test(billing): bless the permission matrix and a neighbour's subscription
+
 ## 0.5.0
 
 ### Minor Changes
