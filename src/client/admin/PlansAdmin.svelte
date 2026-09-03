@@ -59,6 +59,8 @@ interface Draft {
   sso: boolean
   auditDays: string
   stripePriceId: string
+  /** One per line in the form; the row stores a list. */
+  highlights: string
   order: string
   published: boolean
 }
@@ -77,6 +79,7 @@ const emptyDraft = (): Draft => ({
   sso: true,
   auditDays: '',
   stripePriceId: '',
+  highlights: '',
   order: '100',
   published: false,
 })
@@ -96,6 +99,7 @@ const toDraft = (p: Plan): Draft => ({
   sso: p.limits.sso,
   auditDays: p.limits.auditRetentionDays === null ? '' : String(p.limits.auditRetentionDays),
   stripePriceId: p.stripePriceId ?? '',
+  highlights: p.highlights.join('\n'),
   order: String(p.order),
   published: p.published,
 })
@@ -134,7 +138,12 @@ const save = createMutation(() => ({
         apiRateLimit: null,
       },
       stripePriceId: d.stripePriceId.trim() || null,
-      highlights: [],
+      // Used to be sent as `[]` on every save, so editing a plan's price wiped what the pricing
+      // page listed under it — and there was no field to put it back.
+      highlights: d.highlights
+        .split('\n')
+        .map((h) => h.trim())
+        .filter(Boolean),
       published: d.published,
       order: Number(d.order || 100),
     }),
@@ -299,6 +308,12 @@ const intervalOptions = $derived([
         <Field label={t('admin_plan_description')}>
           {#snippet children(id)}
             <Textarea {id} bind:value={editing!.description} rows={2} />
+          {/snippet}
+        </Field>
+
+        <Field label={t('admin_plan_highlights')} hint={t('admin_plan_highlights_hint')}>
+          {#snippet children(id)}
+            <Textarea {id} bind:value={editing!.highlights} rows={4} />
           {/snippet}
         </Field>
 

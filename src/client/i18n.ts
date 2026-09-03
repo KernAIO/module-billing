@@ -45,6 +45,9 @@ export const en: Record<string, Message> = {
   'billing.admin_plan_changed_toast': 'Plan changed',
   'billing.admin_plan_currency': 'Currency',
   'billing.admin_plan_description': 'Description',
+  'billing.admin_plan_highlights': 'Highlights',
+  'billing.admin_plan_highlights_hint':
+    'One per line. The pricing page lists them under the plan, so say only what the plan actually includes.',
   'billing.admin_plan_draft': 'Draft',
   'billing.admin_plan_edit': 'Edit',
   'billing.admin_plan_interval': 'Billed',
@@ -203,6 +206,9 @@ const ar: Record<string, Message> = {
   'billing.admin_plan_changed_toast': 'تغيّرت الخطة',
   'billing.admin_plan_currency': 'العملة',
   'billing.admin_plan_description': 'الوصف',
+  'billing.admin_plan_highlights': 'أبرز المزايا',
+  'billing.admin_plan_highlights_hint':
+    'ميزة واحدة في كل سطر. تعرضها صفحة الأسعار تحت الخطة، فاذكر فقط ما تتضمنه الخطة فعلاً.',
   'billing.admin_plan_draft': 'مسودة',
   'billing.admin_plan_edit': 'تحرير',
   'billing.admin_plan_interval': 'دورة الفوترة',
@@ -357,6 +363,9 @@ const de: Record<string, Message> = {
   'billing.admin_plan_changed_toast': 'Tarif geändert',
   'billing.admin_plan_currency': 'Währung',
   'billing.admin_plan_description': 'Beschreibung',
+  'billing.admin_plan_highlights': 'Leistungen',
+  'billing.admin_plan_highlights_hint':
+    'Eine pro Zeile. Die Preisseite listet sie unter dem Tarif auf – nennen Sie nur, was der Tarif tatsächlich enthält.',
   'billing.admin_plan_draft': 'Entwurf',
   'billing.admin_plan_edit': 'Bearbeiten',
   'billing.admin_plan_interval': 'Abrechnung',
@@ -516,6 +525,9 @@ const fa: Record<string, Message> = {
   'billing.admin_plan_changed_toast': 'طرح تغییر کرد',
   'billing.admin_plan_currency': 'واحد پول',
   'billing.admin_plan_description': 'توضیح',
+  'billing.admin_plan_highlights': 'ویژگی‌های برجسته',
+  'billing.admin_plan_highlights_hint':
+    'هر کدام در یک خط. صفحهٔ قیمت‌ها آن‌ها را زیر طرح نشان می‌دهد، پس فقط چیزی را بنویسید که طرح واقعاً شامل آن است.',
   'billing.admin_plan_draft': 'پیش‌نویس',
   'billing.admin_plan_edit': 'ویرایش',
   'billing.admin_plan_interval': 'دوره',
@@ -668,6 +680,9 @@ const tr: Record<string, Message> = {
   'billing.admin_plan_changed_toast': 'Tarife değişti',
   'billing.admin_plan_currency': 'Para birimi',
   'billing.admin_plan_description': 'Açıklama',
+  'billing.admin_plan_highlights': 'Öne çıkanlar',
+  'billing.admin_plan_highlights_hint':
+    'Her satıra bir tane. Fiyat sayfası bunları planın altında listeler; yalnızca planın gerçekten içerdiklerini yazın.',
   'billing.admin_plan_draft': 'Taslak',
   'billing.admin_plan_edit': 'Düzenle',
   'billing.admin_plan_interval': 'Faturalama',
