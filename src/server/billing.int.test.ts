@@ -305,4 +305,20 @@ describe('tenant isolation', () => {
     const theirs = await subsSvc.listInvoices(kernel, WS_B, 50)
     expect(theirs).toHaveLength(0)
   })
+
+  it('answers for exactly the workspace asked about, never a neighbour', async () => {
+    /**
+     * `subscriptions`, `overrides` and `workspace_usage` carry no row-level policy on purpose:
+     * they are instance records *about* workspaces, read by the kernel's entitlement resolver
+     * outside any workspace transaction and administered instance-wide. So the only thing standing
+     * between one workspace and another's subscription is the `where` on each read — which is what
+     * this pins. A read for an id that has no row is `null`, never the nearest row.
+     */
+    const WS_C = randomUUID()
+    const STRANGER = randomUUID()
+    await subsSvc.upsert(kernel, WS_C, { status: 'active', seatsPurchased: 3 })
+    expect((await subsSvc.get(kernel, WS_C))?.seatsPurchased).toBe(3)
+    expect(await subsSvc.get(kernel, STRANGER)).toBeNull()
+    expect(await usageSvc.read(kernel, STRANGER)).toMatchObject({ seats: 0, storageBytes: 0 })
+  })
 })
