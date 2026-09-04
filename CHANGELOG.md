@@ -1,5 +1,14 @@
 # @kernhq/module-billing
 
+## 0.5.7
+
+### Patch Changes
+
+- 8295305: A plan's description and highlights keep the card's alignment on a Persian or Arabic screen while
+  still reading in their own order. The previous fix (`dir="auto"` on each line) got the order right
+  and left the lines as a left-aligned island inside a right-aligned card; the text is now isolated
+  with `<bdi>` instead.
+
 ## 0.5.6
 
 ### Patch Changes
