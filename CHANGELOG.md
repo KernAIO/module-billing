@@ -19,11 +19,12 @@
 
 ### Patch Changes
 
-- f99e63a: The first invoice of a new subscription is no longer lost. Stripe sends `invoice.paid` for it before
-  `checkout.session.completed`, so no subscription row carried the customer yet and the invoice was
-  dropped as applied. The invoice is now placed by the subscription metadata Stripe snapshots on it,
-  refused for retry when nothing can place it, mirrored again when checkout completes, and backfilled
-  nightly for every workspace with a Stripe customer — which restores the ones already missing.
+- f99e63a: An invoice whose customer no subscription row knows yet is no longer dropped as applied.
+  Stripe sends `invoice.paid` for a new subscription's first invoice before
+  `checkout.session.completed`; a checkout started in Kern writes the customer first, so this only
+  bit subscriptions made elsewhere. The invoice is now placed by the subscription metadata Stripe
+  snapshots on it, refused for retry when nothing can place it, mirrored again when checkout
+  completes, and backfilled nightly for every workspace with a Stripe customer.
 
 ## 0.5.9
 

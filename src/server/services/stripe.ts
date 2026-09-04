@@ -321,6 +321,13 @@ async function applySubscription(kernel: Kernel, s: Stripe.Subscription): Promis
     kernel.log.warn({ subscription: s.id }, 'billing: Stripe subscription without a workspace id')
     return
   }
+  if (!(await knownWorkspace(kernel, workspaceId))) {
+    kernel.log.warn(
+      { subscription: s.id, workspaceId },
+      'billing: Stripe subscription names a workspace this instance does not have; skipped',
+    )
+    return
+  }
   const planId = s.metadata?.kern_plan_id ?? null
   const item = s.items.data[0]
   const periodEnd = item?.current_period_end ?? null
@@ -353,10 +360,12 @@ async function applySubscription(kernel: Kernel, s: Stripe.Subscription): Promis
  * Which workspace an invoice belongs to.
  *
  * This used to be one lookup — the subscription row whose Stripe customer matches — and `return`
- * when it found nothing. The first invoice of a new subscription is exactly the case where it finds
- * nothing: Stripe sends `invoice.paid` for it *before* `checkout.session.completed`, so no row has
- * the customer yet, the event was recorded as applied, Stripe never retried, and the invoice was
- * gone for good. The cloud's first real purchase lost its invoice this way.
+ * when it found nothing, with the event recorded as applied so Stripe never retried. A checkout
+ * started here writes the customer onto the row before Checkout opens, so that lookup holds for
+ * the normal path (it did on the cloud's first purchase, which was first suspected of losing its
+ * invoice and had not). It does not hold for a subscription made in the Stripe dashboard, or for
+ * an event that reaches an instance before its own row has the customer — and Stripe sends
+ * `invoice.paid` for a new subscription's first invoice *before* `checkout.session.completed`.
  *
  * The invoice itself says where it belongs: `parent.subscription_details.metadata` is a snapshot of
  * the subscription's metadata, which carries `kern_workspace_id`. That is read first; the customer
@@ -366,6 +375,36 @@ async function applySubscription(kernel: Kernel, s: Stripe.Subscription): Promis
  * behind it and a customer nobody here knows is not a Kern invoice, and is skipped, loudly.
  */
 async function workspaceOfInvoice(
+  kernel: Kernel,
+  stripe: Stripe,
+  inv: Stripe.Invoice,
+): Promise<string | null> {
+  const found = await resolveInvoiceWorkspace(kernel, stripe, inv)
+  if (found && !(await knownWorkspace(kernel, found))) {
+    kernel.log.warn(
+      { invoice: inv.id, workspaceId: found },
+      'billing: Stripe invoice names a workspace this instance does not have; skipped',
+    )
+    return null
+  }
+  return found
+}
+
+/**
+ * Whether this instance has the workspace an event names.
+ *
+ * One Stripe account delivers every event to every endpoint registered on it, so a checkout run
+ * from a developer's machine against the shared sandbox reaches the cloud too — and the cloud
+ * wrote an invoice row for a workspace id it had never seen, with a 200 and nothing in the log.
+ * `invoices.workspace_id` has no foreign key to catch it. An event for a workspace core does not
+ * know is not this instance's business, and is skipped loudly rather than mirrored.
+ */
+async function knownWorkspace(kernel: Kernel, workspaceId: string): Promise<boolean> {
+  const rows = await kernel.call<Array<{ id: string }>>('core.workspaces.list', { limit: 10_000 })
+  return rows.some((r) => r.id === workspaceId)
+}
+
+async function resolveInvoiceWorkspace(
   kernel: Kernel,
   stripe: Stripe,
   inv: Stripe.Invoice,

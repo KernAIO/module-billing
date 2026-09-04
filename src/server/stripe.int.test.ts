@@ -361,10 +361,11 @@ describe('a webhook whose handler fails', () => {
  * The invoice that arrived first.
  *
  * Stripe sends `invoice.paid` for a new subscription's first invoice *before*
- * `checkout.session.completed`. No subscription row carried the customer yet, `applyInvoice`
- * returned quietly, the event was recorded as applied and never retried — so the first invoice of
- * every subscription was lost, and the billing screen's invoice list stayed empty after a purchase.
- * The cloud's first real purchase (a $0 trial invoice) is how it was noticed.
+ * `checkout.session.completed`. When no subscription row carries the customer yet — a subscription
+ * made in the Stripe dashboard, an instance whose row is behind — `applyInvoice` returned quietly,
+ * the event was recorded as applied and never retried, and the invoice was gone. (A checkout
+ * started here writes the customer first, which is why the cloud's first purchase kept its invoice
+ * while being suspected of losing it.)
  */
 describe('an invoice that arrives before its subscription', () => {
   const invoiceRows = () => kernel.database.db.select().from(invoices).where(eq(invoices.workspaceId, WS))
@@ -418,6 +419,50 @@ describe('an invoice that arrives before its subscription', () => {
     expect((await post(signed(event).payload, signed(event).signature)).status).toBe(200)
     expect((await invoiceRows()).map((r) => r.stripeInvoiceId)).toEqual(['in_early'])
     expect((await subsSvc.get(kernel, WS))?.stripeSubscriptionId).toBe('sub_test_1')
+  })
+
+  it('ignores an event for a workspace this instance does not have', async () => {
+    // One sandbox, every endpoint: a developer's checkout reaches the cloud too. The cloud wrote
+    // an invoice row for a workspace id it had never seen, with a 200 and nothing in the log.
+    const stranger = randomUUID()
+    const invoice = signed({
+      id: 'evt_stranger_invoice',
+      type: 'invoice.paid',
+      data: {
+        object: invoiceObject({
+          id: 'in_stranger',
+          customer: 'cus_stranger',
+          parent: {
+            type: 'subscription_details',
+            subscription_details: { subscription: 'sub_stranger', metadata: { kern_workspace_id: stranger } },
+          },
+        }),
+      },
+    })
+    expect((await post(invoice.payload, invoice.signature)).status).toBe(200)
+    const created = signed({
+      id: 'evt_stranger_sub',
+      type: 'customer.subscription.created',
+      data: {
+        object: subscriptionObject({
+          id: 'sub_stranger',
+          customer: 'cus_stranger',
+          metadata: { kern_workspace_id: stranger, kern_plan_id: planId },
+        }),
+      },
+    })
+    expect((await post(created.payload, created.signature)).status).toBe(200)
+
+    const orphanInvoices = await kernel.database.pool.query(
+      `select 1 from mod_billing.invoices where workspace_id = $1`,
+      [stranger],
+    )
+    const orphanSubs = await kernel.database.pool.query(
+      `select 1 from mod_billing.subscriptions where workspace_id = $1`,
+      [stranger],
+    )
+    expect(orphanInvoices.rowCount).toBe(0)
+    expect(orphanSubs.rowCount).toBe(0)
   })
 
   it('skips an invoice that is not a subscription’s and whose customer nobody knows', async () => {
