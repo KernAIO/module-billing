@@ -421,13 +421,20 @@ function once(run: () => void) {
                   </span>
                   <span class="text-[12px] text-[var(--kern-ink-400)]">{priceNote(plan)}</span>
                 </div>
+                <!--
+                  Free text an administrator typed, in whatever language they typed it. Under a
+                  Persian screen an English highlight rendered backwards — "2 GB of storage" with
+                  the 2 at the far end — because the block's direction was applied to a line whose
+                  own direction is Latin. `dir="auto"` lets each line follow its first strong
+                  character; the text alignment stays with the screen.
+                -->
                 {#if plan.description}
-                  <p class="text-[13px] text-[var(--kern-ink-700)]">{plan.description}</p>
+                  <p class="text-[13px] text-[var(--kern-ink-700)]" dir="auto">{plan.description}</p>
                 {/if}
                 {#if plan.highlights.length}
                   <ul class="mt-1 grid gap-1">
                     {#each plan.highlights as h (h)}
-                      <li class="text-[12.5px] text-[var(--kern-ink-700)]">{h}</li>
+                      <li class="text-[12.5px] text-[var(--kern-ink-700)]" dir="auto">{h}</li>
                     {/each}
                   </ul>
                 {/if}
