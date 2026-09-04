@@ -204,15 +204,17 @@ const planOptions = $derived([
   {:else}
     <!-- the table scrolls inside itself; the page body must never scroll sideways -->
     <div class="overflow-x-auto">
+      <!-- Seven columns, sized to fit the admin pane at a laptop width: this sat at eight and was
+           wider than the pane behind the second sidebar, so the revenue column and the row menu
+           lived off-screen with nothing to say so. Seats and storage share a cell. -->
       <Table
-        columns="minmax(150px,2fr) minmax(110px,1fr) minmax(104px,auto) minmax(68px,auto) minmax(84px,auto) minmax(96px,auto) minmax(84px,auto) 40px"
+        columns="minmax(100px,2fr) minmax(90px,1.2fr) minmax(104px,auto) minmax(112px,auto) minmax(80px,auto) minmax(72px,auto) 36px"
       >
         <TableHeader>
           <TableCell header>{t('admin_col_workspace')}</TableCell>
           <TableCell header>{t('admin_col_plan')}</TableCell>
           <TableCell header>{t('admin_col_status')}</TableCell>
-          <TableCell header end>{t('admin_col_seats')}</TableCell>
-          <TableCell header end>{t('admin_col_storage')}</TableCell>
+          <TableCell header end>{t('admin_col_usage')}</TableCell>
           <TableCell header>{t('admin_col_renews')}</TableCell>
           <TableCell header end>{t('admin_col_revenue')}</TableCell>
           <TableCell header end></TableCell>
@@ -227,14 +229,15 @@ const planOptions = $derived([
                 </span>
               </div>
             </TableCell>
-            <TableCell>
-              <div class="flex items-center gap-1.5">
+            <!-- The badge sits under the name, never beside it: side by side, one of the two was
+                 always the thing that got clipped ("Overrid", then "B…") in a column this narrow. -->
+            <TableCell class="min-w-0">
+              <div class="grid">
                 <span class="truncate">{row.planName ?? t('no_plan')}</span>
                 {#if row.overridden}
-                  <!-- shrink-0: the badge was the thing that gave way, and "Overrid" is not a word -->
-                  <Badge tone="purple" class="shrink-0" title={t('admin_overridden_hint')}>
-                    {t('admin_overridden')}
-                  </Badge>
+                  <span class="mt-0.5">
+                    <Badge tone="purple" title={t('admin_overridden_hint')}>{t('admin_overridden')}</Badge>
+                  </span>
                 {/if}
               </div>
             </TableCell>
@@ -250,9 +253,8 @@ const planOptions = $derived([
             <TableCell end>
               {row.seatsPurchased > 0
                 ? `${nf.format(row.seatsUsed)}/${nf.format(row.seatsPurchased)}`
-                : nf.format(row.seatsUsed)}
+                : nf.format(row.seatsUsed)} · {formatBytes(row.storageBytes, locale)}
             </TableCell>
-            <TableCell end>{formatBytes(row.storageBytes, locale)}</TableCell>
             <TableCell>{day(row.currentPeriodEnd ?? row.trialEndsAt)}</TableCell>
             <TableCell end>
               {row.monthlyMinor > 0 ? formatMoney(row.monthlyMinor, row.currency, locale) : '—'}
