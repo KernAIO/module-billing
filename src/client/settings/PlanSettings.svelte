@@ -323,7 +323,8 @@ function once(run: () => void) {
     </EmptyState>
   {:else}
     <!-- current plan -->
-    <Card>
+    <!-- The card's own padding is off so the 20px inside is the only padding, on every side. -->
+    <Card padding="none">
       <div class="grid gap-4 p-5">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div class="grid gap-1">
@@ -419,15 +420,16 @@ function once(run: () => void) {
               last line with the card's padding pooled underneath. The layout lives on an element
               of our own inside the card.
             -->
-            <Card class="p-4">
-              <div class="grid h-full content-between gap-5">
+            <Card padding="none">
+              <div class="grid h-full content-between gap-5 p-5">
               <div class="grid gap-2">
                 <div class="flex items-center justify-between gap-2">
                   <span class="text-[15px] font-medium text-[var(--kern-ink-900)]">{plan.name}</span>
                   {#if isCurrent}<Badge tone="accent">{t('current')}</Badge>{/if}
                 </div>
                 <div class="flex items-baseline gap-1.5">
-                  <span class="text-[22px] font-medium text-[var(--kern-ink-900)]">
+                  <!-- 22px type at the default line-height leaves a hole above the digits. -->
+                  <span class="text-[22px] font-medium leading-none text-[var(--kern-ink-900)]">
                     {formatMoney(plan.priceMinor, plan.currency, locale)}
                   </span>
                   <span class="text-[12px] text-[var(--kern-ink-400)]">{priceNote(plan)}</span>
