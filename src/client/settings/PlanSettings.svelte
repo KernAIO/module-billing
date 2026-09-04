@@ -413,7 +413,14 @@ function once(run: () => void) {
           {@const isCurrent = sub?.planId === plan.id}
           {@const blocked = planBlockedReason(plan, { seats: usage.seats })}
           <li class="grid">
-            <Card class="grid content-between gap-4 p-4">
+            <!--
+              `Card` is a block: a `grid` class on it does not reach its content, so the gap
+              between the highlights and the button was lost and the button sat flush against the
+              last line with the card's padding pooled underneath. The layout lives on an element
+              of our own inside the card.
+            -->
+            <Card class="p-4">
+              <div class="grid h-full content-between gap-5">
               <div class="grid gap-2">
                 <div class="flex items-center justify-between gap-2">
                   <span class="text-[15px] font-medium text-[var(--kern-ink-900)]">{plan.name}</span>
@@ -468,6 +475,7 @@ function once(run: () => void) {
                   </span>
                 {/snippet}
               </Tooltip>
+              </div>
             </Card>
           </li>
         {/each}
