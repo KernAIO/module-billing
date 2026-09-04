@@ -44,6 +44,42 @@ async function allWorkspaceIds(kernel: Kernel): Promise<string[]> {
   return rows.map((r) => r.id)
 }
 
+/**
+ * Put a workspace on the instance's default plan, trial and all.
+ *
+ * Signup is the normal caller. The nightly job is the other: a workspace that existed before the
+ * default plan was configured never got a row, and a workspace with no row resolves to unlimited —
+ * on the cloud two of the three workspaces were in exactly that state, entitled to everything with
+ * no trial and no bill, and nothing would ever have changed it. An instance with no default plan —
+ * every self-hosted one — gets no row, which is the intended answer.
+ */
+async function enrolOnDefaultPlan(kernel: Kernel, workspaceId: string): Promise<boolean> {
+  const slug = process.env.KERN_DEFAULT_PLAN_SLUG
+  if (!slug) return false
+  const plan = await plansSvc.bySlug(kernel, slug)
+  if (!plan) {
+    const message = `billing: KERN_DEFAULT_PLAN_SLUG names "${slug}", which is not a plan on this instance`
+    // On an instance that takes payments this is not a warning, it is a workspace being handed
+    // the whole product for nothing — so it throws, the bus retries, and the workspace picks up
+    // its subscription as soon as the plan exists. An instance with no Stripe key is a
+    // self-hosted Kern, where unlimited is the intended answer and nothing should fail.
+    if (stripeSvc.paymentsEnabled()) {
+      kernel.log.error({ slug, workspaceId }, message)
+      throw KernError.conflict(message, 'billing.plan.default_missing')
+    }
+    kernel.log.warn({ slug }, message)
+    return false
+  }
+  const trialEndsAt = new Date()
+  trialEndsAt.setUTCDate(trialEndsAt.getUTCDate() + plan.trialDays)
+  await subsSvc.upsert(kernel, workspaceId, {
+    planId: plan.id,
+    status: plan.trialDays > 0 ? 'trialing' : 'active',
+    trialEndsAt: plan.trialDays > 0 ? trialEndsAt : null,
+  })
+  return true
+}
+
 export const billingModule = defineServerModule({
   definition: defineModule({
     id: MODULE_ID,
@@ -181,29 +217,7 @@ export const billingModule = defineServerModule({
      */
     'core.workspace.created': async (e, kernel) => {
       const p = e.payload as { workspaceId: string }
-      const slug = process.env.KERN_DEFAULT_PLAN_SLUG
-      if (!slug) return
-      const plan = await plansSvc.bySlug(kernel, slug)
-      if (!plan) {
-        const message = `billing: KERN_DEFAULT_PLAN_SLUG names "${slug}", which is not a plan on this instance`
-        // On an instance that takes payments this is not a warning, it is a workspace being handed
-        // the whole product for nothing — so it throws, the bus retries, and the workspace picks up
-        // its subscription as soon as the plan exists. An instance with no Stripe key is a
-        // self-hosted Kern, where unlimited is the intended answer and nothing should fail.
-        if (stripeSvc.paymentsEnabled()) {
-          kernel.log.error({ slug, workspaceId: p.workspaceId }, message)
-          throw KernError.conflict(message, 'billing.plan.default_missing')
-        }
-        kernel.log.warn({ slug }, message)
-        return
-      }
-      const trialEndsAt = new Date()
-      trialEndsAt.setUTCDate(trialEndsAt.getUTCDate() + plan.trialDays)
-      await subsSvc.upsert(kernel, p.workspaceId, {
-        planId: plan.id,
-        status: plan.trialDays > 0 ? 'trialing' : 'active',
-        trialEndsAt: plan.trialDays > 0 ? trialEndsAt : null,
-      })
+      await enrolOnDefaultPlan(kernel, p.workspaceId)
     },
   },
 
@@ -214,6 +228,14 @@ export const billingModule = defineServerModule({
       cron: '17 3 * * *',
       handler: async (_input: unknown, { kernel }: { kernel: Kernel }) => {
         for (const workspaceId of await allWorkspaceIds(kernel)) {
+          // A workspace with no subscription row is unlimited; on an instance with a default plan
+          // that is a workspace that predates the plan, and it starts its trial tonight.
+          try {
+            if (!(await subsSvc.get(kernel, workspaceId)) && (await enrolOnDefaultPlan(kernel, workspaceId)))
+              kernel.log.info({ workspaceId }, 'billing: enrolled a workspace that had no subscription')
+          } catch (err) {
+            kernel.log.warn({ err: String(err), workspaceId }, 'billing: could not enrol workspace')
+          }
           try {
             const { drift } = await usageSvc.reconcile(kernel, workspaceId)
             // Logged, never silently corrected: a counter that keeps needing correction means an

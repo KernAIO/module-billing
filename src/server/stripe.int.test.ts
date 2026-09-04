@@ -44,6 +44,10 @@ let admin: pg.Client
 let app: FastifyInstance
 let httpUrl: string
 let planId: string
+/** What core answers `workspaces.list` with — the workspaces this instance has. */
+const knownWorkspaces: Array<{ id: string; name: string; slug: string }> = [
+  { id: WS, name: 'Acme', slug: 'acme' },
+]
 
 /** Every request the double saw, so what we sent Stripe can be asserted. */
 const seen: Array<{ method: string; path: string; body: URLSearchParams }> = []
@@ -224,7 +228,7 @@ beforeAll(async () => {
     'modules.isEnabled': { handler: async () => true },
     'workspaces.seats': { handler: async () => ({ seats: 12 }) },
     'workspaces.usage': { handler: async () => ({ seats: 12, storageBytes: 0 }) },
-    'workspaces.list': { handler: async () => [{ id: WS, name: 'Acme', slug: 'acme' }] },
+    'workspaces.list': { handler: async () => knownWorkspaces },
   })
   await kernel.start()
 
@@ -677,6 +681,21 @@ describe('a trial that has run out', () => {
     if (!job) throw new Error(`no job named ${name}`)
     await job.handler({}, { kernel, id: 'test', attempt: 1 })
   }
+
+  it('starts a trial for a workspace that predates the default plan', async () => {
+    // A workspace with no subscription row is unlimited. On the cloud two of the three workspaces
+    // were created before the default plan was configured and had been entitled to everything,
+    // with no trial and no bill, ever since — and nothing would ever have changed it.
+    const older = randomUUID()
+    knownWorkspaces.push({ id: older, name: 'Older', slug: 'older' })
+    expect(await subsSvc.get(kernel, older)).toBeNull()
+    await runJob('billing.reconcile-usage')
+    const sub = await subsSvc.get(kernel, older)
+    expect(sub?.status).toBe('trialing')
+    expect(sub?.planSlug).toBe('team')
+    expect(sub?.trialEndsAt).not.toBeNull()
+    knownWorkspaces.pop()
+  })
 
   it('suspends a workspace with no Stripe subscription behind it', async () => {
     const yesterday = new Date(Date.now() - 86_400_000)
