@@ -1,5 +1,11 @@
 # @kernhq/module-billing
 
+## 0.5.3
+
+### Patch Changes
+
+- chore(mock): the demo plan stops promising single sign-on
+
 ## 0.5.2
 
 ### Patch Changes
