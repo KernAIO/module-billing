@@ -514,16 +514,31 @@ function once(run: () => void) {
                 <TableCell>{day(inv.createdAt)}</TableCell>
                 <TableCell end>{formatMoney(inv.totalMinor, inv.currency, locale)}</TableCell>
                 <TableCell end>
-                  {#if inv.hostedUrl}
-                    <a
-                      class="text-[13px] text-[var(--kern-accent-deep)] underline-offset-2 hover:underline"
-                      href={inv.hostedUrl}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                    >
-                      {t('invoice_view')}
-                    </a>
-                  {/if}
+                  <!-- Both links Stripe gives us: the hosted page (pay, see the receipt) and the PDF
+                       an accountant files. Neither is ours to render, so nothing is shown when
+                       Stripe sent none. -->
+                  <span class="inline-flex items-center gap-3">
+                    {#if inv.hostedUrl}
+                      <a
+                        class="text-[13px] text-[var(--kern-accent-deep)] underline-offset-2 hover:underline"
+                        href={inv.hostedUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                      >
+                        {t('invoice_view')}
+                      </a>
+                    {/if}
+                    {#if inv.pdfUrl}
+                      <a
+                        class="text-[13px] text-[var(--kern-accent-deep)] underline-offset-2 hover:underline"
+                        href={inv.pdfUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                      >
+                        {t('invoice_pdf')}
+                      </a>
+                    {/if}
+                  </span>
                 </TableCell>
               </TableRow>
             {/each}
