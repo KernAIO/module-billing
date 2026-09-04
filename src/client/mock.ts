@@ -56,7 +56,7 @@ let plans: Plan[] = [
       apiRateLimit: null,
     },
     stripePriceId: 'price_demo_business',
-    highlights: ['Everything in Team', 'SSO over OIDC and SAML'],
+    highlights: ['Everything in Team', 'Audit log kept two years'],
     published: true,
     order: 20,
     createdAt: iso(-40),
