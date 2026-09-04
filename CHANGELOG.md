@@ -1,5 +1,12 @@
 # @kernhq/module-billing
 
+## 0.5.9
+
+### Patch Changes
+
+- 4d6ecce: Each invoice row links the PDF Stripe issued beside the hosted page, so an accountant gets the file
+  without leaving the billing screen.
+
 ## 0.5.8
 
 ### Patch Changes
