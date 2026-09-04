@@ -436,16 +436,19 @@ function once(run: () => void) {
                   Free text an administrator typed, in whatever language they typed it. Under a
                   Persian screen an English highlight rendered backwards — "2 GB of storage" with
                   the 2 at the far end — because the block's direction was applied to a line whose
-                  own direction is Latin. `dir="auto"` lets each line follow its first strong
-                  character; the text alignment stays with the screen.
+                  own direction is Latin. `dir="auto"` on the block fixed the order and broke the
+                  alignment — the line became a left-aligned island in a right-aligned card — and
+                  so did `unicode-bidi: plaintext`, because Chrome resolves `text-align: start`
+                  against the paragraph's resolved direction in both cases. `<bdi>` isolates the
+                  run inside a block that keeps the card's direction and alignment.
                 -->
                 {#if plan.description}
-                  <p class="text-[13px] text-[var(--kern-ink-700)]" dir="auto">{plan.description}</p>
+                  <p class="text-[13px] text-[var(--kern-ink-700)]"><bdi>{plan.description}</bdi></p>
                 {/if}
                 {#if plan.highlights.length}
                   <ul class="mt-1 grid gap-1">
                     {#each plan.highlights as h (h)}
-                      <li class="text-[12.5px] text-[var(--kern-ink-700)]" dir="auto">{h}</li>
+                      <li class="text-[12.5px] text-[var(--kern-ink-700)]"><bdi>{h}</bdi></li>
                     {/each}
                   </ul>
                 {/if}
