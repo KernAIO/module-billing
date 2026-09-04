@@ -1,5 +1,13 @@
 # @kernhq/module-billing
 
+## 0.5.8
+
+### Patch Changes
+
+- f5bc572: The billing cards carry one consistent 20px of padding instead of the card's own 14px fighting a
+  second layer, and the plan price no longer leaves a hole above its digits. Both were invisible
+  until the shell started generating the utilities module screens use.
+
 ## 0.5.7
 
 ### Patch Changes
