@@ -1,5 +1,11 @@
 # @kernhq/module-billing
 
+## 0.5.12
+
+### Patch Changes
+
+- fix(admin): fit the subscriptions table in the admin pane
+
 ## 0.5.11
 
 ### Patch Changes
