@@ -1,5 +1,13 @@
 # @kernhq/module-billing
 
+## 0.5.6
+
+### Patch Changes
+
+- b9c843b: The plan cards on the billing screen breathe again: the _Choose_ button sat flush against the last
+  highlight with the card's padding pooled beneath it, because the grid that was meant to space them
+  was declared on the card itself, which is a block. The layout now lives on an element inside it.
+
 ## 0.5.5
 
 ### Patch Changes
