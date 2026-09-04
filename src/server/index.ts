@@ -224,6 +224,12 @@ export const billingModule = defineServerModule({
           } catch (err) {
             kernel.log.warn({ err: String(err), workspaceId }, 'billing: reconcile failed')
           }
+          // Invoices a webhook missed — the first one of a subscription used to be lost every time
+          try {
+            await stripeSvc.backfillInvoices(kernel, workspaceId)
+          } catch (err) {
+            kernel.log.warn({ err: String(err), workspaceId }, 'billing: invoice backfill failed')
+          }
         }
       },
     },

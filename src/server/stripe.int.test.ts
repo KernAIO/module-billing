@@ -12,7 +12,7 @@ import pg from 'pg'
 import Stripe from 'stripe'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { billingModule } from './index.js'
-import { subscriptions } from './schema.js'
+import { invoices, subscriptions } from './schema.js'
 import * as entitlements from './services/entitlements.js'
 import * as plansSvc from './services/plans.js'
 import * as stripeSvc from './services/stripe.js'
@@ -49,7 +49,29 @@ let planId: string
 const seen: Array<{ method: string; path: string; body: URLSearchParams }> = []
 /** Stripe's answer for `GET /v1/subscriptions/:id`; null makes the retrieve fail. */
 let remoteSubscription: Record<string, unknown> | null = null
+/** Stripe's answer for `GET /v1/invoices`. */
+let remoteInvoices: Array<Record<string, unknown>> = []
 let stripeDouble: Server
+
+/** An invoice the way Stripe sends it: the subscription's metadata snapshotted under `parent`. */
+function invoiceObject(over: Record<string, unknown> = {}) {
+  return {
+    id: 'in_test_1',
+    object: 'invoice',
+    customer: CUSTOMER,
+    status: 'paid',
+    total: 0,
+    currency: 'usd',
+    number: 'KERN-0001',
+    hosted_invoice_url: 'https://invoice.stripe.test/in_test_1',
+    invoice_pdf: 'https://invoice.stripe.test/in_test_1/pdf',
+    parent: {
+      type: 'subscription_details',
+      subscription_details: { subscription: 'sub_test_1', metadata: { kern_workspace_id: WS } },
+    },
+    ...over,
+  }
+}
 
 function subscriptionObject(over: Record<string, unknown> = {}) {
   return {
@@ -89,6 +111,7 @@ function startStripeDouble(): Promise<string> {
         res.end(JSON.stringify(payload))
       }
       if (path.startsWith('/v1/customers')) return send({ id: CUSTOMER, object: 'customer' })
+      if (path === '/v1/invoices') return send({ object: 'list', data: remoteInvoices, has_more: false })
       if (path.startsWith('/v1/checkout/sessions'))
         return send({
           id: 'cs_test_1',
@@ -331,6 +354,103 @@ describe('a webhook whose handler fails', () => {
     const retry = await post(signed(event).payload, signed(event).signature)
     expect(retry.status).toBe(200)
     expect(await retry.json()).toMatchObject({ handled: true })
+  })
+})
+
+/**
+ * The invoice that arrived first.
+ *
+ * Stripe sends `invoice.paid` for a new subscription's first invoice *before*
+ * `checkout.session.completed`. No subscription row carried the customer yet, `applyInvoice`
+ * returned quietly, the event was recorded as applied and never retried — so the first invoice of
+ * every subscription was lost, and the billing screen's invoice list stayed empty after a purchase.
+ * The cloud's first real purchase (a $0 trial invoice) is how it was noticed.
+ */
+describe('an invoice that arrives before its subscription', () => {
+  const invoiceRows = () => kernel.database.db.select().from(invoices).where(eq(invoices.workspaceId, WS))
+
+  it('is placed by the subscription metadata Stripe snapshots on it', async () => {
+    // no row knows this customer: exactly the state a first invoice meets
+    await subsSvc.upsert(kernel, WS, { stripeCustomerId: null, stripeSubscriptionId: null })
+    await kernel.database.pool.query(`delete from mod_billing.invoices where workspace_id = $1`, [WS])
+    const { payload, signature } = signed({
+      id: 'evt_first_invoice',
+      type: 'invoice.paid',
+      data: { object: invoiceObject({ id: 'in_first', customer: 'cus_unknown_yet' }) },
+    })
+    const res = await post(payload, signature)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ handled: true })
+
+    const rows = await invoiceRows()
+    expect(rows.map((r) => r.stripeInvoiceId)).toEqual(['in_first'])
+    expect(rows[0]?.hostedUrl).toBe('https://invoice.stripe.test/in_test_1')
+    expect(rows[0]?.pdfUrl).toBe('https://invoice.stripe.test/in_test_1/pdf')
+  })
+
+  it('is fetched from Stripe when the snapshot has no workspace, and retried when Stripe cannot answer yet', async () => {
+    await subsSvc.upsert(kernel, WS, { stripeCustomerId: null, stripeSubscriptionId: null })
+    await kernel.database.pool.query(`delete from mod_billing.invoices where workspace_id = $1`, [WS])
+    remoteSubscription = null
+    const event = {
+      id: 'evt_early_invoice',
+      type: 'invoice.paid',
+      data: {
+        object: invoiceObject({
+          id: 'in_early',
+          customer: 'cus_unknown_yet',
+          parent: {
+            type: 'subscription_details',
+            subscription_details: { subscription: 'sub_test_1', metadata: {} },
+          },
+        }),
+      },
+    }
+    // the assertion the defect is about: this used to be 200, which told Stripe never to try again
+    expect((await post(signed(event).payload, signed(event).signature)).status).toBe(500)
+    const claimed = await kernel.database.pool.query(
+      `select 1 from mod_billing.webhook_events where id = 'evt_early_invoice'`,
+    )
+    expect(claimed.rowCount).toBe(0)
+
+    // Stripe retries once the subscription can be read, and the invoice lands with it
+    remoteSubscription = subscriptionObject()
+    expect((await post(signed(event).payload, signed(event).signature)).status).toBe(200)
+    expect((await invoiceRows()).map((r) => r.stripeInvoiceId)).toEqual(['in_early'])
+    expect((await subsSvc.get(kernel, WS))?.stripeSubscriptionId).toBe('sub_test_1')
+  })
+
+  it('skips an invoice that is not a subscription’s and whose customer nobody knows', async () => {
+    const { payload, signature } = signed({
+      id: 'evt_stray_invoice',
+      type: 'invoice.paid',
+      data: { object: invoiceObject({ id: 'in_stray', customer: 'cus_nobody', parent: null }) },
+    })
+    const res = await post(payload, signature)
+    expect(res.status).toBe(200)
+    expect((await invoiceRows()).map((r) => r.stripeInvoiceId)).not.toContain('in_stray')
+  })
+
+  it('is mirrored when checkout completes, for the ones already lost', async () => {
+    await kernel.database.pool.query(`delete from mod_billing.invoices where workspace_id = $1`, [WS])
+    remoteSubscription = subscriptionObject()
+    remoteInvoices = [invoiceObject({ id: 'in_backfilled' })]
+    const { payload, signature } = signed({
+      id: 'evt_checkout_backfill',
+      type: 'checkout.session.completed',
+      data: { object: { id: 'cs_b', object: 'checkout.session', subscription: 'sub_test_1' } },
+    })
+    expect((await post(payload, signature)).status).toBe(200)
+    expect(seen.some((r) => r.method === 'GET' && r.path === '/v1/invoices')).toBe(true)
+    expect((await invoiceRows()).map((r) => r.stripeInvoiceId)).toEqual(['in_backfilled'])
+  })
+
+  it('is mirrored by the nightly backfill on an instance that missed the webhook', async () => {
+    await kernel.database.pool.query(`delete from mod_billing.invoices where workspace_id = $1`, [WS])
+    remoteInvoices = [invoiceObject({ id: 'in_nightly' })]
+    expect(await stripeSvc.backfillInvoices(kernel, WS)).toBe(1)
+    expect((await invoiceRows()).map((r) => r.stripeInvoiceId)).toEqual(['in_nightly'])
+    remoteInvoices = []
   })
 })
 

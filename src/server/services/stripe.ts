@@ -349,16 +349,96 @@ async function applySubscription(kernel: Kernel, s: Stripe.Subscription): Promis
   })
 }
 
-async function applyInvoice(kernel: Kernel, inv: Stripe.Invoice): Promise<void> {
+/**
+ * Which workspace an invoice belongs to.
+ *
+ * This used to be one lookup — the subscription row whose Stripe customer matches — and `return`
+ * when it found nothing. The first invoice of a new subscription is exactly the case where it finds
+ * nothing: Stripe sends `invoice.paid` for it *before* `checkout.session.completed`, so no row has
+ * the customer yet, the event was recorded as applied, Stripe never retried, and the invoice was
+ * gone for good. The cloud's first real purchase lost its invoice this way.
+ *
+ * The invoice itself says where it belongs: `parent.subscription_details.metadata` is a snapshot of
+ * the subscription's metadata, which carries `kern_workspace_id`. That is read first; the customer
+ * row second; and when neither answers, the subscription is fetched from Stripe — a fetch that
+ * fails is *not* caught, so the route answers 500, the claim is released and Stripe delivers the
+ * event again, by which time the subscription has usually arrived. An invoice with no subscription
+ * behind it and a customer nobody here knows is not a Kern invoice, and is skipped, loudly.
+ */
+async function workspaceOfInvoice(
+  kernel: Kernel,
+  stripe: Stripe,
+  inv: Stripe.Invoice,
+): Promise<string | null> {
+  const details = inv.parent?.subscription_details
+  const fromSnapshot = details?.metadata?.kern_workspace_id
+  if (fromSnapshot) return fromSnapshot
+
   const customer = typeof inv.customer === 'string' ? inv.customer : inv.customer?.id
-  if (!customer) return
+  if (customer) {
+    const [row] = await kernel.database.db
+      .select({ workspaceId: subscriptions.workspaceId })
+      .from(subscriptions)
+      .where(eq(subscriptions.stripeCustomerId, customer))
+      .limit(1)
+    if (row) return row.workspaceId
+  }
+
+  const subId = typeof details?.subscription === 'string' ? details.subscription : details?.subscription?.id
+  if (subId) {
+    const remote = await stripe.subscriptions.retrieve(subId)
+    const workspaceId = workspaceOf(remote)
+    if (workspaceId) {
+      // The subscription event has not arrived yet; writing it now is what lets the invoice land.
+      await applySubscription(kernel, remote)
+      return workspaceId
+    }
+  }
+
+  kernel.log.warn(
+    { invoice: inv.id, customer, subscription: subId },
+    'billing: Stripe invoice belongs to no workspace here; skipped',
+  )
+  return null
+}
+
+/**
+ * Mirror every invoice Stripe holds for a subscription or a customer.
+ *
+ * Webhooks are the normal path; this is the repair for the ones that were lost — the first invoice
+ * of every subscription created before `workspaceOfInvoice` existed, and any delivery an instance
+ * missed while it was down. It runs after checkout completes and once a night for every workspace
+ * with a Stripe customer, and is idempotent: `applyInvoice` upserts on the Stripe invoice id.
+ */
+export async function syncInvoices(
+  kernel: Kernel,
+  by: { subscription: string } | { customer: string },
+): Promise<number> {
+  const stripe = required()
+  const list = await stripe.invoices.list({ ...by, limit: 100 })
+  let n = 0
+  for (const inv of list.data) {
+    await applyInvoice(kernel, stripe, inv)
+    n += 1
+  }
+  return n
+}
+
+/** `syncInvoices` for a workspace, when it has a Stripe customer; a no-op otherwise. */
+export async function backfillInvoices(kernel: Kernel, workspaceId: string): Promise<number> {
+  if (!paymentsEnabled()) return 0
   const [row] = await kernel.database.db
-    .select({ workspaceId: subscriptions.workspaceId })
+    .select({ customer: subscriptions.stripeCustomerId })
     .from(subscriptions)
-    .where(eq(subscriptions.stripeCustomerId, customer))
+    .where(eq(subscriptions.workspaceId, workspaceId))
     .limit(1)
-  if (!row) return
-  const workspaceId = row.workspaceId
+  if (!row?.customer) return 0
+  return syncInvoices(kernel, { customer: row.customer })
+}
+
+async function applyInvoice(kernel: Kernel, stripe: Stripe, inv: Stripe.Invoice): Promise<void> {
+  const workspaceId = await workspaceOfInvoice(kernel, stripe, inv)
+  if (!workspaceId) return
   const line = inv.lines?.data?.[0]
   await kernel.database.withWorkspace(workspaceId, async (tx) => {
     await tx
@@ -462,14 +542,24 @@ async function apply(kernel: Kernel, stripe: Stripe, event: Stripe.Event): Promi
           )
         }
       }
+      // The first invoice was paid before this event was sent, and its own webhook may have arrived
+      // before the subscription existed here. Same rule as the seats: never fail the event over it.
+      try {
+        await syncInvoices(kernel, { subscription: subId })
+      } catch (err) {
+        kernel.log.warn(
+          { err: String(err), subscription: subId },
+          'billing: could not mirror invoices after checkout; the nightly backfill will',
+        )
+      }
       break
     }
     case 'invoice.paid':
-      await applyInvoice(kernel, event.data.object)
+      await applyInvoice(kernel, stripe, event.data.object)
       break
     case 'invoice.payment_failed': {
       const inv = event.data.object
-      await applyInvoice(kernel, inv)
+      await applyInvoice(kernel, stripe, inv)
       const customer = typeof inv.customer === 'string' ? inv.customer : inv.customer?.id
       if (customer) {
         const [row] = await kernel.database.db
