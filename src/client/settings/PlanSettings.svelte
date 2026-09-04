@@ -58,6 +58,35 @@ const locale = $derived(messageLocale())
 const returnPath = $derived(`/${slug}/settings/billing/plan`)
 
 /**
+ * Stripe's invoice statuses, said in words. An accountant reading the list needs to know which
+ * rows are still owed before they need the links; the list used to show number, date and amount
+ * and nothing about whether any of it had been paid.
+ */
+const INVOICE_TONE: Record<string, 'success' | 'warning' | 'danger' | 'grey'> = {
+  paid: 'success',
+  open: 'warning',
+  uncollectible: 'danger',
+  void: 'grey',
+  draft: 'grey',
+}
+function invoiceStatus(status: string): string {
+  switch (status) {
+    case 'paid':
+      return t('invoice_status_paid')
+    case 'open':
+      return t('invoice_status_open')
+    case 'uncollectible':
+      return t('invoice_status_uncollectible')
+    case 'void':
+      return t('invoice_status_void')
+    case 'draft':
+      return t('invoice_status_draft')
+    default:
+      return status
+  }
+}
+
+/**
  * What Stripe said on the way back, from `?checkout=`.
  *
  * Read from `window.location` rather than the router: a module page cannot import `$app/state` — it
@@ -501,10 +530,13 @@ function once(run: () => void) {
         />
       {:else}
         <div class="overflow-x-auto">
-          <Table columns="minmax(120px,1fr) minmax(120px,1fr) minmax(100px,auto) minmax(80px,auto)">
+          <Table
+            columns="minmax(120px,1fr) minmax(120px,1fr) minmax(96px,auto) minmax(100px,auto) minmax(80px,auto)"
+          >
             <TableHeader>
               <TableCell header>{t('invoice_number')}</TableCell>
               <TableCell header>{t('invoice_date')}</TableCell>
+              <TableCell header>{t('invoice_status')}</TableCell>
               <TableCell header end>{t('invoice_amount')}</TableCell>
               <TableCell header end></TableCell>
             </TableHeader>
@@ -512,6 +544,9 @@ function once(run: () => void) {
               <TableRow>
                 <TableCell>{inv.number ?? '—'}</TableCell>
                 <TableCell>{day(inv.createdAt)}</TableCell>
+                <TableCell>
+                  <Badge tone={INVOICE_TONE[inv.status] ?? 'grey'}>{invoiceStatus(inv.status)}</Badge>
+                </TableCell>
                 <TableCell end>{formatMoney(inv.totalMinor, inv.currency, locale)}</TableCell>
                 <TableCell end>
                   <!-- Both links Stripe gives us: the hosted page (pay, see the receipt) and the PDF

@@ -231,7 +231,8 @@ const planOptions = $derived([
               <div class="flex items-center gap-1.5">
                 <span class="truncate">{row.planName ?? t('no_plan')}</span>
                 {#if row.overridden}
-                  <Badge tone="purple" title={t('admin_overridden_hint')}>
+                  <!-- shrink-0: the badge was the thing that gave way, and "Overrid" is not a word -->
+                  <Badge tone="purple" class="shrink-0" title={t('admin_overridden_hint')}>
                     {t('admin_overridden')}
                   </Badge>
                 {/if}
