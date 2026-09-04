@@ -290,7 +290,9 @@ function once(run: () => void) {
                 ? t('checkout_slow')
                 : pending
                   ? t('checkout_pending')
-                  : t('checkout_done')}
+                  : sub?.status === 'trialing'
+                    ? t('checkout_trial')
+                    : t('checkout_done')}
         </span>
         <span class="text-[13px] text-[var(--kern-ink-700)]">
           {outcome === 'cancelled'
@@ -301,7 +303,9 @@ function once(run: () => void) {
                 ? t('checkout_slow_hint')
                 : pending
                   ? t('checkout_pending_hint')
-                  : t('checkout_done_hint')}
+                  : sub?.status === 'trialing'
+                    ? t('checkout_trial_hint')
+                    : t('checkout_done_hint')}
         </span>
       </div>
       <Button variant="ghost" size="sm" onclick={() => (outcome = null)}>{t('dismiss')}</Button>
