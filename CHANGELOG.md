@@ -1,5 +1,11 @@
 # @kernhq/module-billing
 
+## 0.5.20
+
+### Patch Changes
+
+- chore(renovate): drop dead @kernhq automerge rule
+
 ## 0.5.19
 
 ### Patch Changes
