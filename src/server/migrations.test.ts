@@ -22,10 +22,39 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { TENANT_TABLES } from './schema.js'
 
 const BASE = process.env.DATABASE_URL ?? 'postgres://kern:kern@localhost:5432/kern'
 const DB = `kern_billing_migrations_${Date.now().toString(36)}`
 const DIR = join(dirname(fileURLToPath(import.meta.url)), '../../migrations')
+
+/**
+ * The tables in `mod_billing` that carry `workspace_id` and deliberately have no policy, each with
+ * the reason and the code that keeps them safe.
+ *
+ * These three are the operator's records *about* a workspace rather than the workspace's own data,
+ * which is the distinction the note at the top of `schema.ts` draws — and `invoices`, which **is**
+ * the customer's own record, is a proper tenant table with a policy on the other side of it.
+ *
+ * Adding a name here is a decision somebody records, not a way to make a red test green: a table
+ * that belongs here is one whose isolation is enforced somewhere a reader can go and look at.
+ */
+const UNSECURED_BY_DESIGN: Record<string, string> = {
+  subscriptions:
+    "the instance console lists every workspace's subscription in one query and the dunning and " +
+    'reconcile jobs enumerate workspaces before they can pick one — neither is possible under a ' +
+    'policy that returns nothing when `app.workspace_id` is unset. Isolation is in the procedure ' +
+    'layer: the workspace-facing reads go through `workspaceScoped` + `requires(billing.subscription.' +
+    "view|manage)` and filter on the caller's own id (services/subscriptions.ts `get`), and the " +
+    'cross-workspace ones sit behind the `instanceAdmin` middleware in router.ts.',
+  overrides:
+    'a per-workspace limit override is the operator comping an account, written and read only by ' +
+    'the `instanceAdmin` procedures in router.ts (`admin.override`) and by the entitlement resolver, ' +
+    'which runs outside any workspace.',
+  workspace_usage:
+    'the seat and storage counters the entitlement resolver reads and the nightly reconcile job ' +
+    'recomputes; both enumerate workspaces from a clock, so neither has a workspace bound.',
+}
 
 let admin: pg.Client
 let client: pg.Client
@@ -111,5 +140,66 @@ describe('the migrations', () => {
       // Without force, the table owner bypasses the policy — and the owner is the service's role.
       expect(row.forced, `${row.relname} does not force RLS`).toBe(true)
     }
+  })
+
+  /**
+   * The question the test above cannot ask.
+   *
+   * It selects the tables that already *have* a policy and checks they force it — so a table with
+   * no policy at all is never looked at, and passes by being invisible. That is not a hypothetical
+   * gap: it is how twelve unsecured tenant tables across the first-party modules went uncounted
+   * while every module's migration test was green (measured on a database created from nothing,
+   * 2026-09-06). Three of the twelve are in this schema.
+   *
+   * So this asks the catalogue the other way round: every table in `mod_billing` carrying a
+   * `workspace_id` column must have RLS enabled, forced, and at least one policy — unless it is
+   * named in `UNSECURED_BY_DESIGN` above with the code that isolates it instead.
+   *
+   * `relkind in ('r','p')` on purpose: a partitioned parent is `'p'`, and an `'r'`-only query
+   * silently skips it.
+   */
+  it('secures every table that carries a workspace column, or names it as an exception', async () => {
+    const { rows } = await client.query<{
+      relname: string
+      enabled: boolean
+      forced: boolean
+      policies: number
+      partition: boolean
+    }>(
+      `select c.relname,
+              c.relrowsecurity as enabled,
+              c.relforcerowsecurity as forced,
+              (select count(*)::int from pg_policy p where p.polrelid = c.oid) as policies,
+              c.relispartition as partition
+         from pg_class c
+        where c.relnamespace = 'mod_billing'::regnamespace
+          and c.relkind in ('r', 'p')
+          and exists (select 1 from pg_attribute a
+                       where a.attrelid = c.oid and a.attname = 'workspace_id' and not a.attisdropped)
+        order by c.relname`,
+    )
+    expect(rows.length, 'no tenant table found at all — the schema did not build').toBeGreaterThan(0)
+
+    const unsecured = rows.filter((r) => !r.enabled || !r.forced || r.policies === 0).map((r) => r.relname)
+    expect(
+      unsecured.filter((t) => !(t in UNSECURED_BY_DESIGN)),
+      'carries workspace_id, has no forced policy, and is not declared an exception',
+    ).toEqual([])
+
+    // The list is only worth trusting if it decays: an exception that has since been given a policy
+    // has to leave, or the next reader believes a table is unprotected when it is not.
+    expect(
+      Object.keys(UNSECURED_BY_DESIGN).filter((t) => !unsecured.includes(t)),
+      'declared an exception and now secured — delete the entry',
+    ).toEqual([])
+
+    // And a table nobody has classified at all is the thing that started this: it must be named
+    // either as a tenant table or as an exception, so adding one is a decision rather than an
+    // omission. Partitions are excluded — `TENANT_TABLES` names the parent, not the months.
+    const classified = new Set<string>([...TENANT_TABLES, ...Object.keys(UNSECURED_BY_DESIGN)])
+    expect(
+      rows.filter((r) => !r.partition && !classified.has(r.relname)).map((r) => r.relname),
+      'carries workspace_id but is in neither TENANT_TABLES nor UNSECURED_BY_DESIGN',
+    ).toEqual([])
   })
 })
