@@ -1,5 +1,11 @@
 # @kernhq/module-billing
 
+## 0.5.18
+
+### Patch Changes
+
+- build(deps): raise @kernhq/testing to ^0.1.14
+
 ## 0.5.17
 
 ### Patch Changes
