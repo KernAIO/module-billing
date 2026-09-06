@@ -1,5 +1,11 @@
 # @kernhq/module-billing
 
+## 0.5.17
+
+### Patch Changes
+
+- test: fail on a tenant table with no policy, not only an unforced one
+
 ## 0.5.16
 
 ### Patch Changes
