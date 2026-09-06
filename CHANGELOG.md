@@ -1,5 +1,11 @@
 # @kernhq/module-billing
 
+## 0.5.19
+
+### Patch Changes
+
+- build: force one @kernhq/kernel copy with pnpm.overrides
+
 ## 0.5.18
 
 ### Patch Changes
