@@ -1,5 +1,11 @@
 # @kernhq/module-billing
 
+## 0.5.21
+
+### Patch Changes
+
+- chore: check the packed tarball can resolve its own imports
+
 ## 0.5.20
 
 ### Patch Changes
